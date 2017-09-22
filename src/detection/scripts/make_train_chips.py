@@ -1,10 +1,10 @@
 import json
-import argparse
 from os import makedirs
 from os.path import join, splitext, basename
 import csv
 import glob
 
+import click
 import numpy as np
 import matplotlib as mpl
 mpl.use('Agg') # NOQA
@@ -49,16 +49,16 @@ def get_boxes_from_geojson(json_path, image_dataset):
 
 
 def print_box_stats(boxes):
-    print('# boxes: {}'.format(len(boxes)))
+    click.echo('# boxes: {}'.format(len(boxes)))
     np_boxes = np.array(boxes)
 
     width = np_boxes[:, 2] - np_boxes[:, 0] + 1
-    print('width (mean, min, max): ({}, {}, {})'.format(
-          np.mean(width), np.min(width), np.max(width)))
+    click.echo('width (mean, min, max): ({}, {}, {})'.format(
+               np.mean(width), np.min(width), np.max(width)))
 
     height = np_boxes[:, 3] - np_boxes[:, 1] + 1
-    print('height (mean, min, max): ({}, {}, {})'.format(
-          np.mean(height), np.min(height), np.max(height)))
+    click.echo('height (mean, min, max): ({}, {}, {})'.format(
+               np.mean(height), np.min(height), np.max(height)))
 
 
 def write_chips_csv(csv_path, chip_rows, append_csv=False):
@@ -199,12 +199,12 @@ def make_neg_chips(image_id, image_dataset, chip_size,
 
             neg_chips_count += 1
         attempt_count += 1
-    print('Wrote {} negative chips.'.format(neg_chips_count))
+    click.echo('Wrote {} negative chips.'.format(neg_chips_count))
 
 
-def make_chips_for_image(image_path, image_id, json_path, output_dir,
-                         chip_size, num_neg_chips, max_attempts, channel_order,
-                         append_csv=False):
+def make_train_chips_for_image(image_path, image_id, json_path, output_dir,
+                               chip_size, num_neg_chips, max_attempts,
+                               channel_order, append_csv=False):
     '''Make training chips from a GeoTIFF and GeoJSON with detections.'''
     output_image_dir = join(output_dir, 'images')
     makedirs(output_image_dir, exist_ok=True)
@@ -225,8 +225,23 @@ def make_chips_for_image(image_path, image_id, json_path, output_dir,
                    num_neg_chips, max_attempts, channel_order)
 
 
-def make_chips(input_dir, output_dir, chip_size, num_neg_chips, max_attempts,
-               channel_order):
+@click.command()
+@click.option('--chip-size', default=300, help='Height and width of each chip')
+@click.option('--num-neg-chips', default=0,
+              help='Number of chips without objects to generate per image')
+@click.option('--max-attempts', default=0,
+              help='Maximum num of random windows to try per image when ' +
+                   'generating negative chips.')
+@click.option('--channel-order', nargs=3, type=int,
+              default=planet_channel_order)
+@click.argument('input_dir')
+@click.argument('output_dir')
+def make_train_chips(input_dir, output_dir, chip_size, num_neg_chips,
+                     max_attempts, channel_order):
+    """
+        Generate a set of training chips and a CSV from a GeoTIFF and GeoJSON
+        file containing labels in the form of polygon bounding boxes.
+    """
     image_paths = glob.glob(join(input_dir, '*.tif'))
     append_csv = False
     for image_path in image_paths:
@@ -235,38 +250,13 @@ def make_chips(input_dir, output_dir, chip_size, num_neg_chips, max_attempts,
         json_fn = image_id + '.geojson'
         json_path = join(input_dir, json_fn)
 
-        print('Making chips for {}...'.format(image_fn))
-        make_chips_for_image(image_path, image_id, json_path, output_dir,
-                             chip_size, num_neg_chips, max_attempts,
-                             channel_order, append_csv=append_csv)
-        print()
+        click.echo('Making chips for {}...'.format(image_fn))
+        make_train_chips_for_image(image_path, image_id, json_path, output_dir,
+                                   chip_size, num_neg_chips, max_attempts,
+                                   channel_order, append_csv=append_csv)
+        click.echo()
         append_csv = True
 
 
-def parse_args():
-    description = """
-        Generate a set of training chips and a CSV from a GeoTIFF and GeoJSON
-        file containing labels in the form of polygon bounding boxes.
-    """
-    parser = argparse.ArgumentParser(description=description)
-    parser.add_argument('--input-dir')
-    parser.add_argument('--output-dir')
-    parser.add_argument('--chip-size', type=int, default=300)
-    parser.add_argument('--num-neg-chips', type=int, default=0,
-                        help='Number of chips without objects to generate ' +
-                             'per image')
-    parser.add_argument('--max-attempts', type=int, default=0,
-                        help='Maximum num of random windows to try per ' +
-                             'image when generating negative chips')
-    parser.add_argument('--channel-order', nargs=3, type=int,
-                        default=planet_channel_order)
-
-    return parser.parse_args()
-
-
 if __name__ == '__main__':
-    args = parse_args()
-    print(args)
-
-    make_chips(args.input_dir, args.output_dir, args.chip_size,
-               args.num_neg_chips, args.max_attempts, args.channel_order)
+    make_train_chips()

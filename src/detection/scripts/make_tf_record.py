@@ -3,12 +3,12 @@ import logging
 import os
 import io
 from collections import OrderedDict
-import argparse
 from os.path import join, basename
 from os import makedirs
 import glob
 import random
 
+import click
 import PIL.Image
 import tensorflow as tf
 from scipy.misc import imread, imsave
@@ -124,7 +124,13 @@ def read_annotations(annotations_path):
     return annotations
 
 
-def create_tf_records(data_dir, debug):
+@click.command()
+@click.option('--debug', is_flag=True)
+@click.argument('data_dir')
+def make_tf_record(data_dir, debug):
+    """
+        Convert training chips and CSV into TFRecord format which TF needs.
+    """
     label_map_path = join(data_dir, 'label_map.pbtxt')
     label_map = label_map_util.load_labelmap(label_map_path)
     categories = label_map_util.convert_label_map_to_categories(
@@ -161,20 +167,5 @@ def create_tf_records(data_dir, debug):
                      image_dir, val_file_names, debug_dir)
 
 
-def parse_args():
-    description = """
-        Convert training chips and CSV into TFRecord format which TF needs.
-    """
-    parser = argparse.ArgumentParser(description=description)
-
-    parser.add_argument('--data-dir')
-    parser.add_argument('--debug', dest='debug', action='store_true')
-
-    return parser.parse_args()
-
-
 if __name__ == '__main__':
-    args = parse_args()
-    print(args)
-
-    create_tf_records(args.data_dir, args.debug)
+    make_tf_record()

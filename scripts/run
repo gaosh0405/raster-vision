@@ -26,6 +26,8 @@ then
             -p 6006:6006 \
             -v "$SRC":/opt/src \
             -v /opt/data:/opt/data \
+            -e "AWS_PROFILE=$AWS_PROFILE" \
+            -v "$HOME/.aws":/root/.aws \
             raster-vision-cpu "${@:2}"
     elif [ "${1:-}" = "--gpu" ]
     then

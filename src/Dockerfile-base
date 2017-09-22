@@ -37,7 +37,7 @@ RUN conda install -y python=${python_version} scikit-learn six h5py \
     conda clean -yt
 
 
-RUN pip install flake8 awscli spectral lxml
+RUN pip install flake8 awscli spectral lxml shapely
 
 WORKDIR /opt/src
 ENV PYTHONPATH=/opt/src/:/opt/src/detection/models:/opt/src/detection/models/slim:$PYTHONPATH
@@ -46,3 +46,6 @@ ENV PYTHONPATH=/opt/src/:/opt/src/detection/models:/opt/src/detection/models/sli
 USER root
 RUN mkdir /opt/data
 RUN chown -R keras:root /opt/data
+
+RUN export LC_ALL=C.UTF-8
+RUN export LANG=C.UTF-8

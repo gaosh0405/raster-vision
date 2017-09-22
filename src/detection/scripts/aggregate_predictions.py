@@ -1,8 +1,8 @@
 import json
-import argparse
 from os import makedirs
-from os.path import join
+from os.path import join, dirname
 
+import click
 import numpy as np
 from scipy.misc import imsave
 import matplotlib as mpl
@@ -249,10 +249,11 @@ def save_geojson(path, boxes, classes, scores, im_size, category_index,
         json.dump(geojson, json_file, indent=4)
 
 
-def aggregate_predictions(image_path, window_info_path, predictions_path,
-                          label_map_path, output_dir, channel_order,
-                          debug=False):
-    print('Aggregating predictions over windows...')
+def _aggregate_predictions(image_path, chip_info_path, predictions_path,
+                           label_map_path, agg_predictions_path,
+                           agg_predictions_debug_path=None,
+                           channel_order=planet_channel_order):
+    click.echo('Aggregating predictions over windows...')
 
     label_map = label_map_util.load_labelmap(label_map_path)
     categories = label_map_util.convert_label_map_to_categories(
@@ -262,55 +263,54 @@ def aggregate_predictions(image_path, window_info_path, predictions_path,
     image_dataset = rasterio.open(image_path)
     im_size = [image_dataset.width, image_dataset.height]
 
-    with open(window_info_path) as window_info_file:
-        window_info = json.load(window_info_file)
-        window_offsets = window_info['offsets']
-        window_size = window_info['window_size']
+    with open(chip_info_path) as chip_info_file:
+        chip_info = json.load(chip_info_file)
+        chip_offsets = chip_info['offsets']
+        chip_size = chip_info['chip_size']
 
     with open(predictions_path) as predictions_file:
         predictions = json.load(predictions_file)
 
-    makedirs(output_dir, exist_ok=True)
     boxes, scores, classes = compute_agg_predictions(
-        window_offsets, window_size, im_size, predictions)
+        chip_offsets, chip_size, im_size, predictions)
     # Due to the sliding window approach, sometimes there are multiple
     # slightly different detections where there should only be one. So
     # we group them together.
     boxes, classes, scores = group_predictions(boxes, classes, scores, im_size)
 
-    agg_predictions_path = join(output_dir, 'predictions.geojson')
+    makedirs(dirname(agg_predictions_path), exist_ok=True)
     save_geojson(agg_predictions_path, boxes, classes, scores, im_size,
                  category_index, image_dataset=image_dataset)
 
-    if debug:
+    if agg_predictions_debug_path is not None:
+        makedirs(dirname(agg_predictions_debug_path), exist_ok=True)
         im = load_window(image_dataset, channel_order)
-        plot_path = join(output_dir, 'predictions.png')
-        plot_predictions(plot_path, im, category_index, boxes, scores, classes)
+        plot_predictions(agg_predictions_debug_path, im, category_index, boxes,
+                         scores, classes)
 
 
-def parse_args():
-    description = """
+@click.command()
+@click.argument('image-path')
+@click.argument('chip-info-path')
+@click.argument('predictions-path')
+@click.argument('label-map-path')
+@click.argument('agg-predictions-path')
+@click.option('--agg-predictions-debug-path', default=None)
+@click.option('--channel-order', nargs=3, type=int,
+              default=planet_channel_order)
+def aggregate_predictions(image_path, chip_info_path, predictions_path,
+                          label_map_path, agg_predictions_path,
+                          agg_predictions_debug_path=None,
+                          channel_order=planet_channel_order):
+    """
         Aggregate predictions from windows into predictions over original
         image. The output is GeoJSON in the CRS of the input image.
     """
-    parser = argparse.ArgumentParser(description=description)
-
-    parser.add_argument('--image-path', help='Path to TIFF or VRT file')
-    parser.add_argument('--window-info-path')
-    parser.add_argument('--predictions-path')
-    parser.add_argument('--label-map-path')
-    parser.add_argument('--output-dir')
-    parser.add_argument('--channel-order', nargs=3, type=int,
-                        default=planet_channel_order)
-    parser.add_argument('--debug', dest='debug', action='store_true')
-
-    return parser.parse_args()
+    _aggregate_predictions(image_path, chip_info_path, predictions_path,
+                           label_map_path, agg_predictions_path,
+                           agg_predictions_debug_path=agg_predictions_debug_path,
+                           channel_order=channel_order)
 
 
 if __name__ == '__main__':
-    args = parse_args()
-    print(args)
-
-    aggregate_predictions(
-        args.image_path, args.window_info_path, args.predictions_path,
-        args.label_map_path, args.output_dir, args.channel_order, args.debug)
+    aggregate_predictions()
